@@ -6,6 +6,8 @@ const qs = require("querystring");
 
 const PORT = 11000;
 const CONTACT_URL = (process.env.CONTACT_URL || "https://www.therapie-vr.fr/contact").split("?")[0];
+// Sites autorisés à recevoir le visiteur après l'envoi (retour vers la page d'origine).
+const ORIGINS = ["https://www.therapie-vr.fr", "https://demo.therapie-vr.fr"];
 const OBJECTS = ["Prise de rendez-vous", "Demande d'informations", "Autre"];
 // Clé HMAC dérivée de la clé Mailjet : stable entre redémarrages, rien de plus à configurer.
 const SECRET = crypto.createHash("sha256").update("form:" + (process.env.MJ_APIKEY_PRIVATE || "dev")).digest();
@@ -80,7 +82,17 @@ async function send(f) {
   if (!r.ok) throw new Error(`Mailjet ${r.status} ${await r.text()}`);
 }
 
-const redirect = (res, qsPart) => { res.writeHead(303, { Location: `${CONTACT_URL}?${qsPart}` }); res.end(); };
+function backTo(referer) {
+  try {
+    const u = new URL(referer);
+    if (ORIGINS.includes(u.origin)) return u.origin + u.pathname;
+  } catch {}
+  return CONTACT_URL;
+}
+const redirect = (req, res, qsPart) => {
+  res.writeHead(303, { Location: `${backTo(req.headers.referer)}?${qsPart}` });
+  res.end();
+};
 
 const server = http.createServer((req, res) => {
   const ip = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress).split(",")[0].trim();
@@ -108,14 +120,14 @@ const server = http.createServer((req, res) => {
         || (!(await turnstileOk(f["cf-turnstile-response"], ip)) && "turnstile");
       if (reason) {
         console.log(`rejet ${reason} ip=${ip}`);
-        return redirect(res, "success=true");
+        return redirect(req, res, "success=true");
       }
       await send(f);
       console.log(`envoyé ip=${ip}`);
-      redirect(res, "success=true");
+      redirect(req, res, "success=true");
     } catch (err) {
       console.error("erreur", err);
-      redirect(res, "error=true");
+      redirect(req, res, "error=true");
     }
   });
 });
@@ -123,4 +135,4 @@ const server = http.createServer((req, res) => {
 if (require.main === module) {
   server.listen(PORT, "localhost", () => console.log(`mailer sur http://localhost:${PORT}`));
 }
-module.exports = { check, sign, rateLimited };
+module.exports = { check, sign, rateLimited, backTo };

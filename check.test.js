@@ -1,6 +1,6 @@
 // node mailer/check.test.js
 const assert = require("assert");
-const { check, sign, rateLimited } = require("./server");
+const { check, sign, rateLimited, backTo } = require("./server");
 
 const now = Date.now();
 const ok = {
@@ -30,5 +30,10 @@ rateLimited("1.2.3.4", now);
 rateLimited("1.2.3.4", now);
 assert.strictEqual(rateLimited("1.2.3.4", now), true);
 assert.strictEqual(rateLimited("1.2.3.4", now + 11 * 60 * 1000), false);
+
+assert.strictEqual(backTo("https://demo.therapie-vr.fr/contact?success=true"), "https://demo.therapie-vr.fr/contact");
+assert.strictEqual(backTo("https://www.therapie-vr.fr/contact"), "https://www.therapie-vr.fr/contact");
+assert.strictEqual(backTo("https://evil.example/contact"), "https://www.therapie-vr.fr/contact");
+assert.strictEqual(backTo(undefined), "https://www.therapie-vr.fr/contact");
 
 console.log("ok");
